@@ -1,0 +1,532 @@
+/*
+ * This file is based largely off the Roon API methods, schema, and documentation,
+ * Copyright 2016 Roon Labs (https://github.com/RoonLabs/node-roon-api)
+ * 
+ * gRPC definition:
+ * Copyright 2019 Sam Bosley
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+syntax = "proto3";
+package com.sambosley.grpc.roon;
+
+import "google/protobuf/wrappers.proto";
+
+service RoonService {
+  // Zone utilities (based on subscribe_zones result from RoonTransportApi)
+  rpc GetZone(GetZoneRequest) returns (GetZoneResponse);
+  rpc ListAllZones(ListAllZonesRequest) returns (ListAllZonesResponse);
+  
+  // RoonBrowseApi methods
+  rpc Browse(BrowseRequest) returns (BrowseResponse);
+  rpc Load(LoadRequest) returns (LoadResponse);
+  
+  // RoonImageApi methods
+  rpc GetImage(GetImageRequest) returns (GetImageResponse);
+
+  // RoonTransportApi methods
+  rpc ChangeSettings(ChangeSettingsRequest) returns (TransportResponse);
+  rpc ChangeVolume(ChangeVolumeRequest) returns (TransportResponse);
+  rpc Control(ControlRequest) returns (TransportResponse);
+  rpc ConvenienceSwitch(ConvenienceSwitchRequest) returns (TransportResponse);
+  rpc GroupOutputs(GroupOutputsRequest) returns (TransportResponse);
+  rpc Mute(MuteRequest) returns (TransportResponse);
+  rpc MuteAll(MuteAllRequest) returns (TransportResponse);
+  rpc PauseAll(PauseAllRequest) returns (TransportResponse);
+  rpc Seek(SeekRequest) returns (TransportResponse);
+  rpc Standby(StandbyRequest) returns (TransportResponse);
+  rpc ToggleStandby(ToggleStandbyRequest) returns (TransportResponse);
+  rpc TransferZone(TransferZoneRequest) returns (TransportResponse);
+  rpc UngroupOutputs(UngroupOutputsRequest) returns (TransportResponse);
+}
+
+message GetZoneRequest {
+  string zone_id = 1;
+}
+
+message GetZoneResponse {
+  Zone zone = 1;
+}
+
+message ListAllZonesRequest {}
+message ListAllZonesResponse {
+  repeated Zone zones = 1;
+}
+
+message Zone {
+  // Unique id for this zone.
+  string zone_id = 1;
+  // The display name for this zone.
+  string display_name = 2;
+  // Current play state for this zone.
+  PlayState state = 3;
+  // Indicates if the 'previous' control is supported.
+  bool is_previous_allowed = 4;
+  // Indicates if the 'next' control is supported.
+  bool is_next_allowed = 5;
+  // Indicates if the 'pause' control is supported.
+  bool is_pause_allowed = 6;
+  // Indicates if the 'play' control is supported.
+  bool is_play_allowed = 7;
+  // Indicates if the 'seek' control is supported.
+  bool is_seek_allowed = 8;
+  // Current seek position for the zone.
+  float seek_position = 9;
+  // Number of items in the play queue for this zone.
+  int32 queue_items_remaining = 10;
+  // Number of seconds remaining in the play queue for this zone.
+  float queue_time_remaining = 11;
+  // The current loop, shuffle, and auto-radio settings for this zone.
+  ZoneSettings settings = 12;
+  // Info about the currently playing item in this zone.
+  ZoneNowPlaying now_playing = 13;
+  // The outputs in this zone.
+  repeated Output outputs = 14;
+}
+
+enum PlayState {
+  state_unspecified = 0;
+  playing = 1;
+  paused = 2;
+  loading = 3;
+  stopped = 4;
+}
+
+message ZoneSettings {
+  // The loop setting.
+  LoopMode loop = 1;
+  // Indicates if shuffle is enabled.
+  bool shuffle = 2;
+  // Indicates if auto-radio mode is enabled.
+  bool auto_radio = 3;
+}
+
+enum LoopMode {
+  loop_unspecified = 0;
+  loop = 1;
+  loop_one = 2;
+  disabled = 3;
+  next = 4;
+}
+
+message ZoneNowPlaying {
+  // The seek position in seconds of the currently playing item, if applicable.
+  float seek_position = 1;
+  // The length in seconds of the currently playing item, if applicable.
+  float length = 2;
+  // The image_key for the currently playing item.
+  string image_key = 3;
+  // Display text for one-line displays.
+  ZoneDisplayOneLine one_line = 4;
+  // Display text for two-line displays.
+  ZoneDisplayTwoLine two_line = 5;
+  // Display text for three-line displays.
+  ZoneDisplayThreeLine three_line = 6;
+}
+
+message ZoneDisplayOneLine {
+  string line1 = 1;
+}
+
+message ZoneDisplayTwoLine {
+  string line1 = 1;
+  string line2 = 2;
+}
+
+message ZoneDisplayThreeLine {
+  string line1 = 1;
+  string line2 = 2;
+  string line3 = 3;
+}
+
+message Output {
+  // Unique id for this output.
+  string output_id = 1;
+  // The id of the zone that this output is a part of.
+  string zone_id = 2;
+  // The display name for this output.
+  string display_name = 3;
+  // Current play state for this output.
+  PlayState state = 4;
+  // Source control info for this output, if applicable.
+  OutputSourceControls source_controls = 5;
+  // This field is populated for outputs that support volume control. Note that volume values, 
+  // bounds, and step are floating point values, not integers, and that volume ranges can 
+  // extend below and above zero, sometimes at the same time.
+  OutputVolume volume = 6;
+}
+
+message OutputSourceControls {
+  // The display name for this source control.
+  string display_name = 1;
+  // The current status of this source control.
+  SourceControlStaus status = 2;
+  // Indicates if this source control supports standby mode.
+  bool supports_standby = 3;
+
+  enum SourceControlStaus {
+    status_unspecified = 0;
+    selected = 1;
+    deselected = 2;
+    standby = 3;
+    indeterminate = 4;
+  }
+}
+
+message OutputVolume {
+  // The type of volume control.
+  OutputVolumeType type = 1;
+  // The minimum value in the volume range.
+  float min = 2;
+  // The maximum value in the volume range.
+  float max = 3;
+  // The current value of the volume control.
+  float value = 4;
+  // The step size for the volume control, in terms of its native units.
+  float step = 5;
+  // Indicates if the output is currently muted.
+  bool is_muted = 6;
+
+  enum OutputVolumeType {
+    volume_unspecified = 0;
+    // Volume control based on a numeric value.
+    number = 1;
+    // Volume control based on decibels.
+    db = 2;
+    // Represents a volume control that just has "+" and "-" buttons, with no feedback about the 
+    // current volume value or its range. It might  be used in conjunction with an IR blaster, 
+    // for example. In this case, all of the remaining properties will be absent. With an 
+    // "incremental" control, you should display two buttons, and when issuing change_volume 
+    // requests, use "relative" mode and only send adjustments of +1/-1.
+    incremental = 3;
+  }
+}
+
+message BrowseRequest {
+  // The hierarchy being browsed.
+  BrowseHierarchy hierarchy = 1;
+  // If your application browses several instances of the same hierarchy at the same time,
+  // you can populate this to distinguish between them. Most applications will omit this field.
+  string multi_session_key = 2;
+  // The key from an Item. If you omit this, the most recent level will be re-loaded.
+  string item_key = 3;
+  // Input from the input box.
+  string input = 4;
+  // Zone or output ID. This is required for any playback-related functionality to work.
+  string zone_or_output_id = 5;
+  // True to pop all levels but the first. If true, then the session will be reset so that 
+  // browsing begins from the root of the hierarchy. If this is false or unset, then the 
+  // core will attempt to resume at the previous browsing position. It is not valid to 
+  // provide pop_all and item_key at the same time.
+  bool pop_all = 6;
+  // If set, pop n levels.
+  int32 pop_levels = 7;
+  // If set, refresh the list contents.
+  bool refresh_list = 8;
+  // Update the display offset for the current list prior to performing the browse operation.
+  int32 set_display_offset = 9;
+}
+
+enum BrowseHierarchy {
+  hierarchy_unspecified = 0;
+  browse = 1;
+  playlists = 2;
+  settings = 3;
+  internet_radio = 4;
+  albums = 5;
+  artists = 6;
+  genres = 7;
+  composers = 8;
+  search = 9;
+}
+
+message BrowseResponse {
+  // The action that the client should take as a result of this load.
+  BrowseAction action = 1;
+  // When the action is 'replace_item', this is the replacement item.
+  Item item = 2;
+  // When the action is 'list', this represents the current list.
+  List list = 3;
+  // When the action is 'message', this is the message to display.
+  string message = 4;
+  // When the action is 'message', this indicates whether the message represents an error or not.
+  bool is_error = 5;
+}
+
+enum BrowseAction {
+  action_unspecified = 0;
+  // Display an message to the user, see the [BrowseResponse.message][] and 
+  // [BrowseResponse.is_error][] properties.
+  message = 1;
+  // No action is required.
+  none = 2;
+  // The current list or its contents have changed. See the [BrowseResponse.list][] property 
+  // for the new level, and load items using the [RoonService.Load][] request.
+  list = 3;
+  // Replace the selected item with the item in the [BrowseResponse.item][] property.
+  replace_item = 4;
+  // Remove the selected item.
+  remove_item = 5;
+}
+
+message LoadRequest {
+  // The hierarchy being browsed.
+  BrowseHierarchy hierarchy = 1;
+  // Update the display offset for the current list.
+  int32 set_display_offset = 2;
+  // Which level of the browse hierarchy to load from. Defaults to the current (deepest) level.
+  int32 level = 3;
+  // Offset into the list where loading should begin. Defaults to 0.
+  int32 offset = 4;
+  // Number of items to load. Defaults to 100.
+  int32 count = 5;
+  // If your application browses several instances of the same hierarchy at the same time,
+  // you can populate this to distinguish between them. Most applications will omit this field.
+  string multi_session_key = 6;
+}
+
+message LoadResponse {
+  // The loaded items.
+  repeated Item items = 1;
+  // The current offset into the item list.
+  int32 offset = 2;
+  // List metadata about the loaded items.
+  List list = 3;
+}
+
+message Item {
+  // Title for this item.
+  string title = 1;
+  // Subtitle for this item.
+  string subtitle = 2;
+  // Image key for this item.
+  string image_key = 3;
+  // Pass this into a BrowseRequest when the user selects this item.
+  string item_key = 4;
+  // A hint about what this item is.
+  ItemHint hint = 5;
+  // If loading this item requires user input, then input_prompt will be populated.
+  ItemInputPrompt input_prompt = 6;
+
+  enum ItemHint {
+    hint_unspecified = 0;
+    // Indicates the item is an action.
+    action = 1;
+    // Indicates the item will load a list of actions at the next level.
+    action_list = 2;
+    // Indicates the item will load a list at the next level.
+    list = 3;
+    // Indicates the item is a display-only header with no click action.
+    header = 4;
+  }
+}
+
+message ItemInputPrompt {
+  // The prompt to display to the user: e.g. "Search Albums".
+  string prompt = 1;
+  // The verb that goes with this action. This should be displayed on a button adjacent to 
+  // the input, e.g. "Go".
+  string action = 2;
+  // If non-null, then the value should be pre-populated.
+  string value = 3;
+  // If true, then this should be displayed as a password input.
+  bool is_password = 4;
+}
+
+message List {
+  // Title for this level.
+  string title = 1;
+  // Subtitle for this level.
+  string subtitle = 2;
+  // Number of items in this level.
+  int32 count = 3;
+  // Image key for this level.
+  string image_key = 4;
+  // Increases from 0.
+  int32 level = 5;
+  // Stored display offset for this list.
+  int32 display_offset = 6;
+  // A hint about what this list is. Possible values include 'null' and 'action_list'.
+  string hint = 7;
+}
+
+message GetImageRequest {
+  // The image key, as given by another API.
+  string image_key = 1;
+  // If not set, the image will be returned at original size, which could be very large.
+  ImageScale scale = 2;
+  // The image width to be returned. Required if scale is set.
+  float width = 3;
+  // The image height to be returned. Required if scale is set.
+  float height = 4;
+  // Must be one of 'image/jpeg' or 'image/png'. If you don't specify, Roon will choose for you.
+  string format = 5;
+
+  enum ImageScale {
+    scale_unspecified = 0;
+    fit = 1;
+    fill = 2;
+    stretch = 3;
+  }
+}
+
+message GetImageResponse {
+  // The MIME type of the image data.
+  string content_type = 1;
+  // The image data as raw bytes.
+  bytes image = 2;
+}
+
+message ChangeSettingsRequest {
+  // The zone or output id to change settings for.
+  oneof zone_or_output {
+    string zone_id = 1;
+    string output_id = 2;
+  }
+  // If present, sets the shuffle mode to the specified value.
+  google.protobuf.BoolValue shuffle = 3;
+  // If present, sets auto-radio mode to the specified value.
+  google.protobuf.BoolValue auto_radio = 4;
+  // If present, sets the loop mode to the specified value. 'next' will cycle between settings.
+  LoopMode loop = 5;
+}
+
+message ChangeVolumeRequest {
+  // The output id to change the volume of.
+  string output_id  = 1;
+  // Indicates how to interpret the volume value.
+  ChangeVolumeType how = 2;
+  // The new volume value, or the increment value or step.
+  float value = 3;
+
+  enum ChangeVolumeType {
+    volume_unspecified = 0;
+    absolute = 1;
+    relative = 2;
+    relative_step = 3;
+  }
+}
+
+message ControlRequest {
+  // The zone or output id to control.
+  oneof zone_or_output {
+    string zone_id = 1;
+    string output_id = 2;
+  }
+  // The action to take.
+  ControlAction control = 3;
+
+  enum ControlAction {
+    action_unspecified = 0;
+    // If paused or stopped, start playback.
+    play = 1;
+    // If playing or loading, pause playback.
+    pause = 2;
+    // If paused or stopped, start playback. If playing or loading, pause playback.
+    playpause = 3;
+    // Stop playback and release the audio device immediately.
+    stop = 4;
+    // Go to the start of the current track, or to the previous track.
+    previous = 5;
+    // Advance to the next track.
+    next = 6;
+  }
+}
+
+message ConvenienceSwitchRequest {
+  // The output id that should be convenience switched.
+  string output_id = 1;
+  // The control_key that identifies the source_control that is to be switched. If omitted,
+  // then all controls on this output will be convenience switched.
+  string control_key = 2;
+}
+
+message GroupOutputsRequest {
+  // The output ids to group. The first output's zone's queue is preserved.
+  repeated string output_ids = 1;
+}
+
+message MuteRequest {
+  // The output to mute or unmute.
+  string output_id = 1;
+  // The action to take.
+  MuteAction how = 2;
+}
+
+message MuteAllRequest {
+  // The action to take.
+  MuteAction how = 1;
+}
+
+enum MuteAction {
+  mute_unspecified = 0;
+  mute = 1;
+  unmute = 2;
+}
+
+message PauseAllRequest {}
+
+message SeekRequest {
+  // The zone or output id.
+  oneof zone_or_output {
+    string zone_id = 1;
+    string output_id = 2;
+  }
+  // Indicates how to interpret the target seek position.
+  SeekType how = 3;
+  // The target seek position.
+  float seconds = 4;
+
+  enum SeekType {
+    seek_unspecified = 0;
+    relative = 1;
+    absolute = 2;
+  }
+}
+
+message StandbyRequest {
+  // The output id to put into standby.
+  string output_id = 1;
+  // The control_key that identifies the source_control that is to be put into standby. 
+  // If omitted, then all controls on this output will be put into standby.
+  string control_key = 2;
+}
+
+message ToggleStandbyRequest {
+  // The output id to put into standby.
+  string output_id = 1;
+  // The control_key that identifies the source_control that should have its standby 
+  // state toggled.
+  string control_key = 2;
+}
+
+message TransferZoneRequest {
+  // The source zone or output id.
+  oneof from_zone_or_output {
+    string from_zone_id = 1;
+    string from_output_id = 2;
+  }
+  // The destination zone or output id.
+  oneof to_zone_or_output {
+    string to_zone_id = 3;
+    string to_output_id = 4;
+  }
+}
+
+message UngroupOutputsRequest {
+  // The outputs to ungroup.
+  repeated string output_ids = 1;
+}
+
+// All RoonTransportApi responses are currently either error or empty.
+message TransportResponse {}

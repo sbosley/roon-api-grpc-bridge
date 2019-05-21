@@ -1,0 +1,5 @@
+config.json
+*.code-workspace
+**/node_modules/
+bazel-*
+.DS_Store
