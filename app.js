@@ -512,7 +512,25 @@ function startRoonDiscovery(roonService, args) {
     provided_services: [statusSvc],
     required_services: [RoonApiTransport, RoonApiBrowse, RoonApiImage]
   })
-  roon.start_discovery()
+  if (args.dockerMac) {
+    // Docker for Mac has trouble with UDP discovery, so just attempt
+    // to connect directly in this case.
+    tryDockerHostWsConnect(roon, 0)
+  } else {
+    roon.start_discovery()
+  }
+}
+
+function tryDockerHostWsConnect(roon, attempts) {
+  if (attempts >= 10) {
+    console.log('failed to connect after 10 attempts; stopping extension')
+    process.exit(1)
+  } else {
+    roon.ws_connect({host: 'host.docker.internal', port: 9100, onclose: () => {
+      console.log('lost Roon connection, attempting to connect again...')
+      setTimeout(() => tryDockerHostWsConnect(roon, attempts + 1), 5000)
+    }})
+  }
 }
 
 // TODO: it might be better if the config.json location were a Roon 
@@ -531,6 +549,7 @@ function main() {
     .option('-p, --port [port]', 'the port on which to expose the Roon Bridge gRPC server', s => parseInt(s, 10), 50051)
     .option('-l, --log-level [logLevel]', 'the log level for the Roon API client. Must be one of "none", "info", or "all"', 'none')
     .option('-r, --root [dir]', 'the root directory that identifies the extension to Roon', process.env.BUILD_WORKSPACE_DIRECTORY)
+    .option('--docker-mac', 'indicates if the container is running in docker for Mac, which requires bypassing service discovery')
     .parse(process.argv)
   
   var service = new RoonService()
