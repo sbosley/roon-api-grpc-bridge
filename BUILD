@@ -14,5 +14,5 @@ nodejs_binary(
         "@//protos:roon.proto",
         "app.js",
     ],
-    entry_point = "roon_api_grpc_bridge/app.js",
+    entry_point = ":app.js",
 )
