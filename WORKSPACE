@@ -1,17 +1,13 @@
 workspace(name = "roon_api_grpc_bridge")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
-# Protobuf/gRPC rules
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
-http_archive(
+# Protobuf/gRPC rules
+git_repository(
     name = "rules_proto",
-    sha256 = "602e7161d9195e50246177e7c55b2f39950a9cf7366f74ed5f22fd45750cd208",
-    strip_prefix = "rules_proto-97d8af4dc474595af3900dd85cb3a29ad28cc313",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_proto/archive/97d8af4dc474595af3900dd85cb3a29ad28cc313.tar.gz",
-        "https://github.com/bazelbuild/rules_proto/archive/97d8af4dc474595af3900dd85cb3a29ad28cc313.tar.gz",
-    ],
+    commit = "7e4afce6fe62dbff0a4a03450143146f9f2d7488",
+    remote = "https://github.com/bazelbuild/rules_proto",
+    shallow_since = "1603787634 +0100",
 )
 load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
 rules_proto_dependencies()
