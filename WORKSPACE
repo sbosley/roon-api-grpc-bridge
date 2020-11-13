@@ -1,7 +1,7 @@
 workspace(name = "roon_api_grpc_bridge")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# Protobuf rules
+# Protobuf/gRPC rules
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 http_archive(
@@ -17,15 +17,18 @@ load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_
 rules_proto_dependencies()
 rules_proto_toolchains()
 
-git_repository(
-    name = "com_google_protobuf",
-    commit = "09745575a923640154bcf307fba8aedff47f240a",
-    remote = "https://github.com/protocolbuffers/protobuf",
-    shallow_since = "1558721209 -0700",
+http_archive(
+    name = "com_github_grpc_grpc",
+    sha256 = "2060769f2d4b0d3535ba594b2ab614d7f68a492f786ab94b4318788d45e3278a",
+    strip_prefix = "grpc-1.33.2",
+    urls = [
+        "https://github.com/grpc/grpc/archive/v1.33.2.tar.gz",
+    ],
 )
-
-load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
-protobuf_deps()
+load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
+grpc_deps()
+load("@com_github_grpc_grpc//bazel:grpc_extra_deps.bzl", "grpc_extra_deps")
+grpc_extra_deps()
 
 # Node.js rules
 http_archive(
@@ -47,53 +50,4 @@ npm_install(
     name = "npm",
     package_json = "//:package.json",
     package_lock_json = "//:package-lock.json",
-)
-
-# Go rules
-http_archive(
-    name = "io_bazel_rules_go",
-    sha256 = "08c3cd71857d58af3cda759112437d9e63339ac9c6e0042add43f4d94caf632d",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.24.2/rules_go-v0.24.2.tar.gz",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.24.2/rules_go-v0.24.2.tar.gz",
-    ],
-)
-
-http_archive(
-    name = "bazel_gazelle",
-    sha256 = "d4113967ab451dd4d2d767c3ca5f927fec4b30f3b2c6f8135a2033b9c05a5687",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.22.0/bazel-gazelle-v0.22.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.22.0/bazel-gazelle-v0.22.0.tar.gz",
-    ],
-)
-
-load("@io_bazel_rules_go//go:deps.bzl", "go_rules_dependencies", "go_register_toolchains")
-go_rules_dependencies()
-go_register_toolchains()
-
-# Go gRPC rules
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
-gazelle_dependencies()
-
-go_repository(
-    name = "org_golang_google_grpc",
-    build_file_proto_mode = "disable",
-    importpath = "google.golang.org/grpc",
-    sum = "h1:zvIju4sqAGvwKspUQOhwnpcqSbzi7/H6QomNNjTL4sk=",
-    version = "v1.27.1",
-)
-
-go_repository(
-    name = "org_golang_x_net",
-    importpath = "golang.org/x/net",
-    sum = "h1:CCH4IOTTfewWjGOlSp+zGcjutRKlBEZQ6wTn8ozI/nI=",
-    version = "v0.0.0-20200202094626-16171245cfb2",
-)
-
-go_repository(
-    name = "org_golang_x_text",
-    importpath = "golang.org/x/text",
-    sum = "h1:tW2bmiBqwgJj/UpqtC8EpXEZVYOwU0yG4iWbprSVAcs=",
-    version = "v0.3.2",
 )
