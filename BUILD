@@ -6,6 +6,7 @@ nodejs_binary(
         "@npm//grpc",
         "@npm//@grpc/proto-loader",
         "@npm//commander",
+        "@npm//loglevel",
         "@npm//node-roon-api",
         "@npm//node-roon-api-status",
         "@npm//node-roon-api-transport",

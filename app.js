@@ -18,6 +18,7 @@ const version = '0.1.0'
 const grpc = require('grpc')
 const protoLoader = require('@grpc/proto-loader')
 const commander = require('commander')
+const log = require('loglevel')
 
 const RoonApi = require('node-roon-api')
 const RoonApiStatus = require('node-roon-api-status')
@@ -71,6 +72,19 @@ function copyFields(src, ...keys) {
   return result
 }
 
+function wrapCallback(method, cb, req) {
+  return function(err, resp) {
+    log.debug(`${method} request:\n${JSON.stringify(req, undefined, 2)}`)
+    if (err) {
+      log.debug(`${method} error:\n${JSON.stringify(err, undefined, 2)}`)
+    }
+    if (resp) {
+      log.debug(`${method} response:\n${JSON.stringify(resp, undefined, 2)}`)
+    }
+    cb(err, resp)
+  }
+}
+
 // Bridge is used to implement gRPC handlers by delegating to a function of the given 
 // Roon API object.
 // Args:
@@ -86,8 +100,9 @@ function copyFields(src, ...keys) {
 //     callers will not need this, as most of the bridged functions return only
 //     0 or 1 response objects in their callbacks, which can be mapped to the
 //     gRPC response automatically.
-function bridge(api, funcName, validateAndGetArgs, cbToResponse) {
-  return function(call, callback) {
+function bridge(method, api, funcName, validateAndGetArgs, cbToResponse) {
+  return function(call, cb) {
+    var callback = wrapCallback(method, cb, call.request)
     if (!api) {
       callback(noCorePaired)
       return
@@ -119,7 +134,7 @@ function bridge(api, funcName, validateAndGetArgs, cbToResponse) {
 // RoonService implements gRPC handlers for all RPCs defined in roon.proto
 class RoonService {
   corePaired(_core) {
-    console.log('Paired with core', _core.display_name, _core.display_version)
+    log.info('Paired with core', _core.display_name, _core.display_version)
     this.core = _core
     this.transportApi = _core.services.RoonApiTransport
     this.browseApi = _core.services.RoonApiBrowse
@@ -140,7 +155,7 @@ class RoonService {
   }
 
   coreUnpaired(_core) {
-    console.log('Core unpaired')
+    log.info('Core unpaired')
     this.statusSvc.set_status('No core paired', true)
     delete(this.core)
     delete(this.transportApi)
@@ -173,12 +188,13 @@ class RoonService {
     }
   }
 
-  getZone(call, callback) {
+  getZone(call, cb) {
+    var callback = wrapCallback('GetZone', cb, call.request)
     if (!this.core) { 
       callback(noCorePaired)
       return
     }
-    var result = this.zones[call.request.zone_id]
+    var result = this.lookupZone(call.request.zone_id)
     if (result) {
       callback(null, {zone: result})
     } else {
@@ -186,7 +202,8 @@ class RoonService {
     }
   }
 
-  listAllZones(call, callback) {
+  listAllZones(call, cb) {
+    var callback = wrapCallback('ListAllZones', cb, call.request)
     if (!this.core) { 
       callback(noCorePaired)
       return
@@ -203,7 +220,7 @@ class RoonService {
   // Browse APIs
 
   browse(call, callback) {
-    bridge(this.browseApi, 'browse', req => {
+    bridge('Browse', this.browseApi, 'browse', req => {
       if (!req.hierarchy || req.hierarchy.endsWith('_unspecified')) {
         return {message: 'Must specify a valid hierarchy', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -212,7 +229,7 @@ class RoonService {
   }
 
   load(call, callback) {
-    bridge(this.browseApi, 'load', req => {
+    bridge('Load', this.browseApi, 'load', req => {
       if (!req.hierarchy || req.hierarchy.endsWith('_unspecified')) {
         return {message: 'Must specify a valid hierarchy', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -223,7 +240,7 @@ class RoonService {
   // Image APIs
 
   getImage(call, callback) {
-    bridge(this.imageApi, 'get_image', req => {
+    bridge('GetImage', this.imageApi, 'get_image', req => {
       if (!req.image_key) {
         return {message: 'Must specify an image_key', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -244,7 +261,7 @@ class RoonService {
   // Transport APIs
 
   changeSettings(call, callback) {
-    bridge(this.transportApi, 'change_settings', req => {
+    bridge('ChangeSettings', this.transportApi, 'change_settings', req => {
       removeEnumDefault(req, 'loop')
       var zone_or_output
       if (req.zone_id) {
@@ -272,7 +289,7 @@ class RoonService {
   }
 
   changeVolume(call, callback) {
-    bridge(this.transportApi, 'change_volume', req => {
+    bridge('ChangeVolume', this.transportApi, 'change_volume', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -289,7 +306,7 @@ class RoonService {
   }
 
   control(call, callback) {
-    bridge(this.transportApi, 'control', req => {
+    bridge('Control', this.transportApi, 'control', req => {
       if (!req.control || req.control.endsWith('_unspecified')) {
         return {message: 'Must specify a control action', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -312,7 +329,7 @@ class RoonService {
   }
 
   convenienceSwitch(call, callback) {
-    bridge(this.transportApi, 'convenience_switch', req => {
+    bridge('ConvenienceSwitch', this.transportApi, 'convenience_switch', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -326,7 +343,7 @@ class RoonService {
   }
 
   groupOutputs(call, callback) {
-    bridge(this.transportApi, 'group_outputs', req => {
+    bridge('GroupOutputs', this.transportApi, 'group_outputs', req => {
       var outputsNotFound = []
       var outputs = req.output_ids.map(outputId => {
         var output = this.lookupOutput(outputId)
@@ -343,7 +360,7 @@ class RoonService {
   }
 
   mute(call, callback) {
-    bridge(this.transportApi, 'mute', req => {
+    bridge('Mute', this.transportApi, 'mute', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -359,7 +376,7 @@ class RoonService {
   }
 
   muteAll(call, callback) {
-    bridge(this.transportApi, 'mute_all', req => {
+    bridge('MuteAll', this.transportApi, 'mute_all', req => {
       if (!req.how || req.how.endsWith('_unspecified')) {
         return {message: 'Must specify a mute action', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -368,11 +385,11 @@ class RoonService {
   }
 
   pauseAll(call, callback) {
-    bridge(this.transportApi, 'pause_all', req => [])(call, callback)
+    bridge('PauseAll', this.transportApi, 'pause_all', req => [])(call, callback)
   }
 
   seek(call, callback) {
-    bridge(this.transportApi, 'seek', req => {
+    bridge('Seek', this.transportApi, 'seek', req => {
       var zone_or_output
       if (req.zone_id) {
         zone_or_output = this.lookupZone(req.zone_id)
@@ -396,7 +413,7 @@ class RoonService {
   }
 
   standby(call, callback) {
-    bridge(this.transportApi, 'standby', req => {
+    bridge('Standby', this.transportApi, 'standby', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -410,7 +427,7 @@ class RoonService {
   }
 
   toggleStandby(call, callback) {
-    bridge(this.transportApi, 'toggle_standby', req => {
+    bridge('ToggleStandby', this.transportApi, 'toggle_standby', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -424,7 +441,7 @@ class RoonService {
   }
 
   transferZone(call, callback) {
-    bridge(this.transportApi, 'transfer_zone', req => {
+    bridge('TransferZone', this.transportApi, 'transfer_zone', req => {
       var from
       var to
       if (req.from_zone_id) {
@@ -458,7 +475,7 @@ class RoonService {
   }
 
   ungroupOutputs(call, callback) {
-    bridge(this.transportApi, 'ungroup_outputs', req => {
+    bridge('UngroupOutputs', this.transportApi, 'ungroup_outputs', req => {
       var outputsNotFound = []
       var outputs = req.output_ids.map(outputId => {
         var output = this.lookupOutput(outputId)
@@ -478,19 +495,18 @@ class RoonService {
 function startGRPCServer(roonService, args) {
   var roonProto = loadRoonProto()
   var server = new grpc.Server()
-  var host = `0.0.0.0:${args.port}`
-  console.log(`Starting gRPC server at ${host}`)
+  log.info(`Starting gRPC server at ${args.host}`)
   server.addService(roonProto.RoonService.service, roonService)
-  if (!server.bind(host, grpc.ServerCredentials.createInsecure())) {
-    console.log(`Failed to bind to port ${args.port}`)
+  if (!server.bind(args.host, grpc.ServerCredentials.createInsecure())) {
+    log.error(`Failed to bind to ${args.host}`)
     process.exit(1)
   }
   server.start()
-  console.log('Started gRPC server')
+  log.info('Started gRPC server')
 }
 
 function startRoonDiscovery(roonService, args) {
-  console.log('Starting Roon discovery')
+  log.info('Starting Roon discovery')
   setWorkingDir(args.root)
   var roon = new RoonApi({
     extension_id:    'com.sambosley.grpc.roon',
@@ -499,7 +515,7 @@ function startRoonDiscovery(roonService, args) {
     publisher:       'Sam Bosley',
     email:           'sboz88@gmail.com',
     website:         'https://github.com/sbosley/roon-api-grpc-bridge',
-    log_level:       args.logLevel,
+    log_level:       args.roonLogLevel,
     core_paired:     core => roonService.corePaired(core),
     core_unpaired:   core => roonService.coreUnpaired(core)
   })
@@ -523,11 +539,11 @@ function startRoonDiscovery(roonService, args) {
 
 function tryDockerHostWsConnect(roon, attempts) {
   if (attempts >= 10) {
-    console.log('failed to connect after 10 attempts; stopping extension')
+    log.error('failed to connect after 10 attempts; stopping extension')
     process.exit(1)
   } else {
     roon.ws_connect({host: 'host.docker.internal', port: 9100, onclose: () => {
-      console.log('lost Roon connection, attempting to connect again...')
+      log.error('lost Roon connection, attempting to connect again...')
       setTimeout(() => tryDockerHostWsConnect(roon, attempts + 1), 5000)
     }})
   }
@@ -546,12 +562,14 @@ function main() {
   // which is set by Bazel when running with 'bazel run'.
   var args = commander
     .version(version, '-v, --version')
-    .option('-p, --port [port]', 'the port on which to expose the Roon Bridge gRPC server', s => parseInt(s, 10), 50051)
-    .option('-l, --log-level [logLevel]', 'the log level for the Roon API client. Must be one of "none", "info", or "all"', 'none')
+    .option('-h, --host [host]', 'the host (including port number) on which to expose the Roon Bridge gRPC server', '0.0.0.0:50051')
+    .option('-rl, --roon-log-level [roonLogLevel]', 'the log level for the Roon API client. Must be one of "none", "info", or "all"', 'none')
+    .option('-l, --log-level [logLevel]', 'the log level for the gRPC server. Must be one of "debug", "info", "warn", "error", or "silent"', 'info')
     .option('-r, --root [dir]', 'the root directory that identifies the extension to Roon', process.env.BUILD_WORKSPACE_DIRECTORY)
     .option('--docker-mac', 'indicates if the container is running in docker for Mac, which requires bypassing service discovery')
     .parse(process.argv)
   
+  log.setLevel(args.logLevel)
   var service = new RoonService()
   startGRPCServer(service, args)
   startRoonDiscovery(service, args)

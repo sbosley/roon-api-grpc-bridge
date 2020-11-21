@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 	"time"
-	
+
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 
@@ -41,25 +41,25 @@ func main() {
 func playFirstAlbum(ctx context.Context, c pb.RoonServiceClient, zoneID string) {
 	browseAlbums := &pb.BrowseRequest{
 		Hierarchy: pb.BrowseHierarchy_albums,
-		PopAll: true,
+		PopAll:    true,
 	}
 	resp := browseAndLoadList(ctx, c, browseAlbums)
 
 	browseAlbum0 := &pb.BrowseRequest{
 		Hierarchy: pb.BrowseHierarchy_albums,
-		ItemKey: resp.Items[0].ItemKey,
+		ItemKey:   resp.Items[0].ItemKey,
 	}
 	resp = browseAndLoadList(ctx, c, browseAlbum0)
 
 	browseItemActions := &pb.BrowseRequest{
 		Hierarchy: pb.BrowseHierarchy_albums,
-		ItemKey: resp.Items[0].ItemKey,
+		ItemKey:   resp.Items[0].ItemKey,
 	}
 	resp = browseAndLoadList(ctx, c, browseItemActions)
 
 	playAlbum := &pb.BrowseRequest{
-		Hierarchy: pb.BrowseHierarchy_albums,
-		ItemKey: resp.Items[0].ItemKey,
+		Hierarchy:      pb.BrowseHierarchy_albums,
+		ItemKey:        resp.Items[0].ItemKey,
 		ZoneOrOutputId: zoneID,
 	}
 	_, err := c.Browse(ctx, playAlbum)
@@ -81,7 +81,7 @@ func browseAndLoadList(ctx context.Context, c pb.RoonServiceClient, browse *pb.B
 
 	loadReq := &pb.LoadRequest{
 		Hierarchy: browse.Hierarchy,
-		Count: browseResp.List.Count,
+		Count:     browseResp.List.Count,
 	}
 	loadResp, err := c.Load(ctx, loadReq)
 	if err != nil {
