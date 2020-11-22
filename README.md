@@ -14,9 +14,9 @@ To run the bridge server using Bazel, run the following from the repository root
 ```
 bazel run //:bridge-server
 ```
-The gRPC API started by the extension will listen on port 50051 by default. The port may alternatively be specified with the `--port` argument:
+The gRPC API started by the extension will bind to `0.0.0.0:50051` by default. The host and port may alternatively be specified with the `--host` argument:
 ```
-bazel run //:bridge-server -- --port 1234
+bazel run //:bridge-server -- --host 127.0.0.1:5678
 ```
 Bazel will install and manage its own instance of Node.js along with the bridge-server's npm dependencies, so this is the easiest way to get up and running without any additional setup.
 
@@ -24,8 +24,8 @@ Bazel will install and manage its own instance of Node.js along with the bridge-
 To run using an existing Node.js installation, first install the bridge server dependencies using `npm install`. Then from the repository root, run:
 ```
 node .
-# Or, to have gRPC listen on a custom port:
-node . --port 1234
+# Or, when using the --host arg:
+node . --host 127.0.0.1:5678
 ```
 
 ## Extension authorization
