@@ -29,8 +29,8 @@ grpc_extra_deps()
 # Node.js rules
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "4952ef879704ab4ad6729a29007e7094aef213ea79e9f2e94cbe1c9a753e63ef",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/2.2.0/rules_nodejs-2.2.0.tar.gz"],
+    sha256 = "121f17d8b421ce72f3376431c3461cd66bfe14de49059edc7bb008d5aebd16be",
+    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/2.3.1/rules_nodejs-2.3.1.tar.gz"],
 )
 
 load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "npm_install")
@@ -38,6 +38,7 @@ load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "npm_install"
 # preserve_symlinks = False fixes an issue with the gRPC native dependencies
 # See https://github.com/bazelbuild/rules_nodejs/issues/948
 node_repositories(
+    node_version = "14.15.0",
     package_json = ["//:package.json"],
     preserve_symlinks = False,
 )
