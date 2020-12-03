@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
-	"time"
 
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
@@ -19,7 +19,7 @@ func main() {
 	defer conn.Close()
 
 	client := pb.NewRoonServiceClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	zones, err := client.ListAllZones(ctx, &pb.ListAllZonesRequest{})
@@ -35,6 +35,22 @@ func main() {
 	log.Printf("Zone:\n%s", proto.MarshalTextString(zone))
 
 	playFirstAlbum(ctx, client, zone.Zone.ZoneId)
+
+	receiver, err := client.SubscribeZones(ctx, &pb.SubscribeZonesRequest{})
+	if err != nil {
+		log.Fatalf("SubscribeZone failed: %v", err)
+	}
+	for i := 1; i <= 10; i++ {
+		log.Printf("Receiving zones stream: %d", i)
+		resp, err := receiver.Recv()
+		if err == io.EOF {
+			log.Printf("Got EOF")
+			break
+		} else if err != nil {
+			log.Fatalf("Got err receiving stream: %v", err)
+		}
+		log.Printf("Resp:\n%s", proto.MarshalTextString(resp))
+	}
 }
 
 // Demo of using browse and list APIs to play the first album in the album list programmatically

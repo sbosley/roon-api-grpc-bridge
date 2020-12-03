@@ -26,6 +26,7 @@ service RoonService {
   // Zone utilities (based on subscribe_zones result from RoonTransportApi)
   rpc GetZone(GetZoneRequest) returns (GetZoneResponse);
   rpc ListAllZones(ListAllZonesRequest) returns (ListAllZonesResponse);
+  rpc SubscribeZones(SubscribeZonesRequest) returns (stream SubscribeZonesResponse);
   
   // RoonBrowseApi methods
   rpc Browse(BrowseRequest) returns (BrowseResponse);
@@ -61,6 +62,30 @@ message GetZoneResponse {
 message ListAllZonesRequest {}
 message ListAllZonesResponse {
   repeated Zone zones = 1;
+}
+
+message SubscribeZonesRequest {}
+message SubscribeZonesResponse {
+  message ZonesSubscribed {
+    repeated Zone zones = 1;
+  }
+  message ZonesChanged {
+    repeated Zone zones_added = 1;
+    repeated Zone zones_removed = 2;
+    repeated Zone zones_changed = 3;
+    repeated ZoneSeekChange zones_seek_changed = 4;
+  }
+  message ZoneSeekChange {
+    string zone_id = 1;
+    int64 queue_time_remaining = 2;
+    int64 seek_position = 3;
+  }
+  message ZonesUnsubscribed {}
+  oneof subscribe_message {
+    ZonesSubscribed subscribed = 1;
+    ZonesChanged changed = 2;
+    ZonesUnsubscribed unsubscribed = 3;
+  }
 }
 
 message Zone {

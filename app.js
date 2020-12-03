@@ -133,6 +133,11 @@ function bridge(method, api, funcName, validateAndGetArgs, cbToResponse) {
 
 // RoonService implements gRPC handlers for all RPCs defined in roon.proto
 class RoonService {
+  constructor() {
+    this.zones = {}
+    this.zoneSubscribers = []
+  }
+
   corePaired(_core) {
     log.info('Paired with core', _core.display_name, _core.display_version)
     this.core = _core
@@ -143,12 +148,15 @@ class RoonService {
     this.transportApi.subscribe_zones((response, msg) => {
       if (response === 'Subscribed') {
         this.zones = msg.zones.reduce((acc, z) => (acc[z.zone_id] = z) && acc, {})
+        this.sendZonesToSubscribers({subscribed: msg})
       } else if (response === 'Changed') {
         if (msg.zones_removed) msg.zones_removed.forEach(z => delete(this.zones[z.zone_id]))
         if (msg.zones_added) msg.zones_added.forEach(z => this.zones[z.zone_id] = z)
         if (msg.zones_changed) msg.zones_changed.forEach(z => this.zones[z.zone_id] = z)
+        this.sendZonesToSubscribers({changed: msg})
       } else if (response === 'Unsubscribed') {
-        delete(this.zones)
+        this.zones = {}
+        this.sendZonesToSubscribers({unsubscribed: {}})
       }
     })
     this.statusSvc.set_status('OK', false)
@@ -161,26 +169,34 @@ class RoonService {
     delete(this.transportApi)
     delete(this.browseApi)
     delete(this.imageApi)
-    delete(this.zones)
+    this.zones = {}
+    this.sendZonesToSubscribers({unsubscribed: {}})
+  }
+
+  sendZonesToSubscribers(resp) {
+    var subscribers = this.zoneSubscribers.filter(call => {
+      if (call.cancelled || call.status.code) {
+        call.end()
+        return false
+      } else return true
+    })
+    this.zoneSubscribers = subscribers
+    subscribers.forEach(call => call.write(resp))
   }
 
   lookupZone(zoneId) {
-    if (this.zones) {
-      return this.zones[zoneId]
-    }
+    return this.zones[zoneId]
   }
 
   lookupOutput(outputId) {
     var zones = this.zones
-    if (zones) {
-      for (var zoneId in zones) {
-        if (zones.hasOwnProperty(zoneId)) {
-          var outputs = zones[zoneId].outputs
-          if (outputs) {
-            for (var output of outputs) {
-              if (output.output_id === outputId) {
-                return output
-              }
+    for (var zoneId in zones) {
+      if (zones.hasOwnProperty(zoneId)) {
+        var outputs = zones[zoneId].outputs
+        if (outputs) {
+          for (var output of outputs) {
+            if (output.output_id === outputId) {
+              return output
             }
           }
         }
@@ -202,19 +218,31 @@ class RoonService {
     }
   }
 
+  zonesAsList() {
+    var result = {zones: []}
+    var zones = this.zones
+    for (var key in zones) {
+      if (zones.hasOwnProperty(key)) {
+        result.zones.push(zones[key])
+      }
+    }
+    return result
+  }
+
   listAllZones(call, cb) {
     var callback = wrapCallback('ListAllZones', cb, call.request)
     if (!this.core) { 
       callback(noCorePaired)
       return
     }
-    var result = {zones: []}
-    for (var key in this.zones) {
-      if (this.zones.hasOwnProperty(key)) {
-        result.zones.push(this.zones[key])
-      }
-    }
-    callback(null, result)
+    callback(null, this.zonesAsList())
+  }
+
+  subscribeZones(call) {
+    // Ok if no core is paired; subscriber will get a call when one becomes paired
+    this.zoneSubscribers.push(call)
+    var resp = {subscribed: this.zonesAsList()}
+    call.write(resp)
   }
 
   // Browse APIs
