@@ -281,7 +281,7 @@ message BrowseResponse {
   // When the action is 'replace_item', this is the replacement item.
   Item item = 2;
   // When the action is 'list', this represents the current list.
-  List list = 3;
+  ListInfo list = 3;
   // When the action is 'message', this is the message to display.
   string message = 4;
   // When the action is 'message', this indicates whether the message represents an error or not.
@@ -326,7 +326,7 @@ message LoadResponse {
   // The current offset into the item list.
   int32 offset = 2;
   // List metadata about the loaded items.
-  List list = 3;
+  ListInfo list = 3;
 }
 
 message Item {
@@ -368,7 +368,7 @@ message ItemInputPrompt {
   bool is_password = 4;
 }
 
-message List {
+message ListInfo {
   // Title for this level.
   string title = 1;
   // Subtitle for this level.
