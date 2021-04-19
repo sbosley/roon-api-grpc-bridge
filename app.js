@@ -559,21 +559,20 @@ function startRoonDiscovery(roonService, args) {
   if (args.dockerMac) {
     // Docker for Mac has trouble with UDP discovery, so just attempt
     // to connect directly in this case.
-    tryDockerHostWsConnect(roon, 0)
+    tryDockerHostWsConnect(roon)
   } else {
     roon.start_discovery()
   }
 }
 
-function tryDockerHostWsConnect(roon, attempts) {
-  if (attempts >= 10) {
-    log.error('failed to connect after 10 attempts; stopping extension')
-    process.exit(1)
-  } else {
-    roon.ws_connect({host: 'host.docker.internal', port: 9100, onclose: () => {
-      log.error('lost Roon connection, attempting to connect again...')
-      setTimeout(() => tryDockerHostWsConnect(roon, attempts + 1), 5000)
-    }})
+function tryDockerHostWsConnect(roon) {
+  let connect = roon.ws_connect({host: 'host.docker.internal', port: 9100, onclose: () => {
+    log.error('lost Roon connection, attempting to connect again...')
+    setImmediate(() => tryDockerHostWsConnect(roon))
+  }})
+  connect.transport.ws.onerror = (err) => {
+    log.error('failed to connect to Roon; it may be offline, attempting to connect again...')
+    setTimeout(() => tryDockerHostWsConnect(roon), 5000)
   }
 }
 
