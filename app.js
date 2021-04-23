@@ -518,61 +518,75 @@ class RoonService {
       return [outputs]
     })(call, callback)
   }
-}
 
-function startGRPCServer(roonService, args) {
-  var roonProto = loadRoonProto()
-  var server = new grpc.Server()
-  log.info(`Starting gRPC server at ${args.host}`)
-  server.addService(roonProto.RoonService.service, roonService)
-  if (!server.bind(args.host, grpc.ServerCredentials.createInsecure())) {
-    log.error(`Failed to bind to ${args.host}`)
-    process.exit(1)
+  // gRPC and Roon APIs
+  start(args) {
+    this.startGRPCServer(args)
+    this.startRoonDiscovery(args)
   }
-  server.start()
-  log.info('Started gRPC server')
-}
 
-function startRoonDiscovery(roonService, args) {
-  log.info('Starting Roon discovery')
-  setWorkingDir(args.root)
-  var roon = new RoonApi({
-    extension_id:    'com.sambosley.grpc.roon',
-    display_name:    'gRPC Bridge',
-    display_version: version,
-    publisher:       'Sam Bosley',
-    email:           'sboz88@gmail.com',
-    website:         'https://github.com/sbosley/roon-api-grpc-bridge',
-    log_level:       args.roonLogLevel,
-    core_paired:     core => roonService.corePaired(core),
-    core_unpaired:   core => roonService.coreUnpaired(core)
-  })
+  startGRPCServer(args) {
+    if (this.server) {
+      log.error('RPC server already started')
+      return
+    }
+    var roonProto = loadRoonProto()
+    this.server = new grpc.Server()
+    log.info(`Starting gRPC server at ${args.host}`)
+    this.server.addService(roonProto.RoonService.service, this)
+    if (!this.server.bind(args.host, grpc.ServerCredentials.createInsecure())) {
+      log.error(`Failed to bind to ${args.host}`)
+      process.exit(1)
+    }
+    this.server.start()
+    log.info('Started gRPC server')
+  }
+
+  startRoonDiscovery(args) {
+    if (this.roon) {
+      log.error('RoonApi already initialized')
+      return
+    }
+    log.info('Starting Roon discovery')
+    setWorkingDir(args.root)
+    this.roon = new RoonApi({
+      extension_id:    'com.sambosley.grpc.roon',
+      display_name:    'gRPC Bridge',
+      display_version: version,
+      publisher:       'Sam Bosley',
+      email:           'sboz88@gmail.com',
+      website:         'https://github.com/sbosley/roon-api-grpc-bridge',
+      log_level:       args.roonLogLevel,
+      core_paired:     core => this.corePaired(core),
+      core_unpaired:   core => this.coreUnpaired(core)
+    })
+    
+    var statusSvc = new RoonApiStatus(this.roon)
+    statusSvc.set_status("Pairing...", false)
+    this.statusSvc = statusSvc
   
-  var statusSvc = new RoonApiStatus(roon)
-  statusSvc.set_status("Pairing...", false)
-  roonService.statusSvc = statusSvc
-
-  roon.init_services({
-    provided_services: [statusSvc],
-    required_services: [RoonApiTransport, RoonApiBrowse, RoonApiImage]
-  })
-  if (args.dockerMac) {
-    // Docker for Mac has trouble with UDP discovery, so just attempt
-    // to connect directly in this case.
-    tryDockerHostWsConnect(roon)
-  } else {
-    roon.start_discovery()
+    this.roon.init_services({
+      provided_services: [statusSvc],
+      required_services: [RoonApiTransport, RoonApiBrowse, RoonApiImage]
+    })
+    if (args.dockerMac) {
+      // Docker for Mac has trouble with UDP discovery, so just attempt
+      // to connect directly in this case.
+      this.tryDockerHostWsConnect()
+    } else {
+      this.roon.start_discovery()
+    }
   }
-}
-
-function tryDockerHostWsConnect(roon) {
-  let connect = roon.ws_connect({host: 'host.docker.internal', port: 9100, onclose: () => {
-    log.error('lost Roon connection, attempting to connect again...')
-    setImmediate(() => tryDockerHostWsConnect(roon))
-  }})
-  connect.transport.ws.onerror = (err) => {
-    log.error('failed to connect to Roon; it may be offline, attempting to connect again...')
-    setTimeout(() => tryDockerHostWsConnect(roon), 5000)
+  
+  tryDockerHostWsConnect() {
+    let connect = this.roon.ws_connect({host: 'host.docker.internal', port: 9100, onclose: () => {
+      log.error('lost Roon connection, attempting to connect again...')
+      setImmediate(() => this.tryDockerHostWsConnect())
+    }})
+    connect.transport.ws.onerror = (err) => {
+      log.error('failed to connect to Roon; it may be offline, attempting to connect again...')
+      setTimeout(() => this.tryDockerHostWsConnect(), 5000)
+    }
   }
 }
 
@@ -598,8 +612,7 @@ function main() {
   
   log.setLevel(args.logLevel)
   var service = new RoonService()
-  startGRPCServer(service, args)
-  startRoonDiscovery(service, args)
+  service.start(args)
 }
 
 main()
