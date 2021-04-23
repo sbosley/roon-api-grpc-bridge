@@ -74,60 +74,14 @@ function copyFields(src, ...keys) {
 
 function wrapCallback(method, cb, req) {
   return function(err, resp) {
-    log.debug(`${method} request:\n${JSON.stringify(req, undefined, 2)}`)
+    log.debug(`${method} request:\n${JSON.stringify(req, null, 2)}`)
     if (err) {
-      log.debug(`${method} error:\n${JSON.stringify(err, undefined, 2)}`)
+      log.debug(`${method} error:\n${JSON.stringify(err, null, 2)}`)
     }
     if (resp) {
-      log.debug(`${method} response:\n${JSON.stringify(resp, undefined, 2)}`)
+      log.debug(`${method} response:\n${JSON.stringify(resp, null, 2)}`)
     }
     cb(err, resp)
-  }
-}
-
-// Bridge is used to implement gRPC handlers by delegating to a function of the given 
-// Roon API object.
-// Args:
-//   api: a the API object to delegate to
-//   funcName: the name of the function to delegate to as a string
-//   validateAndGetArgs: a function that takes a single argument, which will
-//     be the gRPC request body. This function should validate the request and
-//     return an array of arguments that should be passed to the Roon API function.
-//     If a validation error occurs, this function should instead return a gRPC 
-//     error object to be returned to the client.
-//   cbToResponse (optional): an optional function that takes a variadic set of
-//     arguments and converts them into a single gRPC response object. Most
-//     callers will not need this, as most of the bridged functions return only
-//     0 or 1 response objects in their callbacks, which can be mapped to the
-//     gRPC response automatically.
-function bridge(method, api, funcName, validateAndGetArgs, cbToResponse) {
-  return function(call, cb) {
-    var callback = wrapCallback(method, cb, call.request)
-    if (!api) {
-      callback(noCorePaired)
-      return
-    }
-    removeProtoDefaults(call.request)
-    var argsOrErr = validateAndGetArgs(call.request)
-    if (!(argsOrErr instanceof Array)) {
-      callback(argsOrErr)
-      return
-    }
-    api[funcName](...argsOrErr, (err, ...responseArgs) => {
-      if (err) {
-        callback({message: `Error: ${err}`, code: grpc.status.INTERNAL})
-        return
-      }
-      var response
-      if (cbToResponse) {
-        response = cbToResponse(...responseArgs)
-      } else if (responseArgs.length == 0) {
-        response = {} // For the cases where response is emtpy, e.g. the transport APIs
-      } else {
-        response = responseArgs[0]
-      }
-      callback(null, response)
-    })
   }
 }
 
@@ -171,6 +125,52 @@ class RoonService {
     delete(this.imageApi)
     this.zones = {}
     this.sendZonesToSubscribers({unsubscribed: {}})
+  }
+
+  // Bridge is used to implement gRPC handlers by delegating to a function of the given 
+  // Roon API object.
+  // Args:
+  //   api: a the API object to delegate to
+  //   funcName: the name of the function to delegate to as a string
+  //   validateAndGetArgs: a function that takes a single argument, which will
+  //     be the gRPC request body. This function should validate the request and
+  //     return an array of arguments that should be passed to the Roon API function.
+  //     If a validation error occurs, this function should instead return a gRPC 
+  //     error object to be returned to the client.
+  //   cbToResponse (optional): an optional function that takes a variadic set of
+  //     arguments and converts them into a single gRPC response object. Most
+  //     callers will not need this, as most of the bridged functions return only
+  //     0 or 1 response objects in their callbacks, which can be mapped to the
+  //     gRPC response automatically.
+  bridge(method, api, funcName, validateAndGetArgs, cbToResponse) {
+    return (call, cb) => {
+      var callback = wrapCallback(method, cb, call.request)
+      if (!api) {
+        callback(noCorePaired)
+        return
+      }
+      removeProtoDefaults(call.request)
+      var argsOrErr = validateAndGetArgs(call.request)
+      if (!(argsOrErr instanceof Array)) {
+        callback(argsOrErr)
+        return
+      }
+      api[funcName](...argsOrErr, (err, ...responseArgs) => {
+        if (err) {
+          callback({message: `Error: ${err}`, code: grpc.status.INTERNAL})
+          return
+        }
+        var response
+        if (cbToResponse) {
+          response = cbToResponse(...responseArgs)
+        } else if (responseArgs.length == 0) {
+          response = {} // For the cases where response is emtpy, e.g. the transport APIs
+        } else {
+          response = responseArgs[0]
+        }
+        callback(null, response)
+      })
+    }
   }
 
   sendZonesToSubscribers(resp) {
@@ -248,7 +248,7 @@ class RoonService {
   // Browse APIs
 
   browse(call, callback) {
-    bridge('Browse', this.browseApi, 'browse', req => {
+    this.bridge('Browse', this.browseApi, 'browse', req => {
       if (!req.hierarchy || req.hierarchy.endsWith('_unspecified')) {
         return {message: 'Must specify a valid hierarchy', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -257,7 +257,7 @@ class RoonService {
   }
 
   load(call, callback) {
-    bridge('Load', this.browseApi, 'load', req => {
+    this.bridge('Load', this.browseApi, 'load', req => {
       if (!req.hierarchy || req.hierarchy.endsWith('_unspecified')) {
         return {message: 'Must specify a valid hierarchy', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -268,7 +268,7 @@ class RoonService {
   // Image APIs
 
   getImage(call, callback) {
-    bridge('GetImage', this.imageApi, 'get_image', req => {
+    this.bridge('GetImage', this.imageApi, 'get_image', req => {
       if (!req.image_key) {
         return {message: 'Must specify an image_key', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -289,7 +289,7 @@ class RoonService {
   // Transport APIs
 
   changeSettings(call, callback) {
-    bridge('ChangeSettings', this.transportApi, 'change_settings', req => {
+    this.bridge('ChangeSettings', this.transportApi, 'change_settings', req => {
       removeEnumDefault(req, 'loop')
       var zone_or_output
       if (req.zone_id) {
@@ -317,7 +317,7 @@ class RoonService {
   }
 
   changeVolume(call, callback) {
-    bridge('ChangeVolume', this.transportApi, 'change_volume', req => {
+    this.bridge('ChangeVolume', this.transportApi, 'change_volume', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -334,7 +334,7 @@ class RoonService {
   }
 
   control(call, callback) {
-    bridge('Control', this.transportApi, 'control', req => {
+    this.bridge('Control', this.transportApi, 'control', req => {
       if (!req.control || req.control.endsWith('_unspecified')) {
         return {message: 'Must specify a control action', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -357,7 +357,7 @@ class RoonService {
   }
 
   convenienceSwitch(call, callback) {
-    bridge('ConvenienceSwitch', this.transportApi, 'convenience_switch', req => {
+    this.bridge('ConvenienceSwitch', this.transportApi, 'convenience_switch', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -371,7 +371,7 @@ class RoonService {
   }
 
   groupOutputs(call, callback) {
-    bridge('GroupOutputs', this.transportApi, 'group_outputs', req => {
+    this.bridge('GroupOutputs', this.transportApi, 'group_outputs', req => {
       var outputsNotFound = []
       var outputs = req.output_ids.map(outputId => {
         var output = this.lookupOutput(outputId)
@@ -388,7 +388,7 @@ class RoonService {
   }
 
   mute(call, callback) {
-    bridge('Mute', this.transportApi, 'mute', req => {
+    this.bridge('Mute', this.transportApi, 'mute', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -404,7 +404,7 @@ class RoonService {
   }
 
   muteAll(call, callback) {
-    bridge('MuteAll', this.transportApi, 'mute_all', req => {
+    this.bridge('MuteAll', this.transportApi, 'mute_all', req => {
       if (!req.how || req.how.endsWith('_unspecified')) {
         return {message: 'Must specify a mute action', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -413,11 +413,11 @@ class RoonService {
   }
 
   pauseAll(call, callback) {
-    bridge('PauseAll', this.transportApi, 'pause_all', req => [])(call, callback)
+    this.bridge('PauseAll', this.transportApi, 'pause_all', req => [])(call, callback)
   }
 
   seek(call, callback) {
-    bridge('Seek', this.transportApi, 'seek', req => {
+    this.bridge('Seek', this.transportApi, 'seek', req => {
       var zone_or_output
       if (req.zone_id) {
         zone_or_output = this.lookupZone(req.zone_id)
@@ -441,7 +441,7 @@ class RoonService {
   }
 
   standby(call, callback) {
-    bridge('Standby', this.transportApi, 'standby', req => {
+    this.bridge('Standby', this.transportApi, 'standby', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -455,7 +455,7 @@ class RoonService {
   }
 
   toggleStandby(call, callback) {
-    bridge('ToggleStandby', this.transportApi, 'toggle_standby', req => {
+    this.bridge('ToggleStandby', this.transportApi, 'toggle_standby', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -469,7 +469,7 @@ class RoonService {
   }
 
   transferZone(call, callback) {
-    bridge('TransferZone', this.transportApi, 'transfer_zone', req => {
+    this.bridge('TransferZone', this.transportApi, 'transfer_zone', req => {
       var from
       var to
       if (req.from_zone_id) {
@@ -503,7 +503,7 @@ class RoonService {
   }
 
   ungroupOutputs(call, callback) {
-    bridge('UngroupOutputs', this.transportApi, 'ungroup_outputs', req => {
+    this.bridge('UngroupOutputs', this.transportApi, 'ungroup_outputs', req => {
       var outputsNotFound = []
       var outputs = req.output_ids.map(outputId => {
         var output = this.lookupOutput(outputId)
