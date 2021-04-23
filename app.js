@@ -90,6 +90,7 @@ class RoonService {
   constructor() {
     this.zones = {}
     this.zoneSubscribers = []
+    this.retries = []
   }
 
   corePaired(_core) {
@@ -103,6 +104,8 @@ class RoonService {
       if (response === 'Subscribed') {
         this.zones = msg.zones.reduce((acc, z) => (acc[z.zone_id] = z) && acc, {})
         this.sendZonesToSubscribers({subscribed: msg})
+        this.retries.forEach(r => r())
+        this.retries = []
       } else if (response === 'Changed') {
         if (msg.zones_removed) msg.zones_removed.forEach(z => delete(this.zones[z.zone_id]))
         if (msg.zones_added) msg.zones_added.forEach(z => this.zones[z.zone_id] = z)
@@ -142,8 +145,9 @@ class RoonService {
   //     callers will not need this, as most of the bridged functions return only
   //     0 or 1 response objects in their callbacks, which can be mapped to the
   //     gRPC response automatically.
-  bridge(method, api, funcName, validateAndGetArgs, cbToResponse) {
+  bridge(method, apiName, funcName, validateAndGetArgs, cbToResponse, isRetry) {
     return (call, cb) => {
+      var api = this[apiName]
       var callback = wrapCallback(method, cb, call.request)
       if (!api) {
         callback(noCorePaired)
@@ -157,7 +161,11 @@ class RoonService {
       }
       api[funcName](...argsOrErr, (err, ...responseArgs) => {
         if (err) {
-          callback({message: `Error: ${err}`, code: grpc.status.INTERNAL})
+          if (err === 'NetworkError' && !isRetry) {
+            this.retries.push(() => this.bridge(method, apiName, funcName, validateAndGetArgs, cbToResponse, true)(call, cb))
+          } else {
+            callback({message: `Error: ${err}`, code: grpc.status.INTERNAL})
+          }
           return
         }
         var response
@@ -248,7 +256,7 @@ class RoonService {
   // Browse APIs
 
   browse(call, callback) {
-    this.bridge('Browse', this.browseApi, 'browse', req => {
+    this.bridge('Browse', 'browseApi', 'browse', req => {
       if (!req.hierarchy || req.hierarchy.endsWith('_unspecified')) {
         return {message: 'Must specify a valid hierarchy', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -257,7 +265,7 @@ class RoonService {
   }
 
   load(call, callback) {
-    this.bridge('Load', this.browseApi, 'load', req => {
+    this.bridge('Load', 'browseApi', 'load', req => {
       if (!req.hierarchy || req.hierarchy.endsWith('_unspecified')) {
         return {message: 'Must specify a valid hierarchy', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -268,7 +276,7 @@ class RoonService {
   // Image APIs
 
   getImage(call, callback) {
-    this.bridge('GetImage', this.imageApi, 'get_image', req => {
+    this.bridge('GetImage', 'imageApi', 'get_image', req => {
       if (!req.image_key) {
         return {message: 'Must specify an image_key', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -289,7 +297,7 @@ class RoonService {
   // Transport APIs
 
   changeSettings(call, callback) {
-    this.bridge('ChangeSettings', this.transportApi, 'change_settings', req => {
+    this.bridge('ChangeSettings', 'transportApi', 'change_settings', req => {
       removeEnumDefault(req, 'loop')
       var zone_or_output
       if (req.zone_id) {
@@ -317,7 +325,7 @@ class RoonService {
   }
 
   changeVolume(call, callback) {
-    this.bridge('ChangeVolume', this.transportApi, 'change_volume', req => {
+    this.bridge('ChangeVolume', 'transportApi', 'change_volume', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -334,7 +342,7 @@ class RoonService {
   }
 
   control(call, callback) {
-    this.bridge('Control', this.transportApi, 'control', req => {
+    this.bridge('Control', 'transportApi', 'control', req => {
       if (!req.control || req.control.endsWith('_unspecified')) {
         return {message: 'Must specify a control action', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -357,7 +365,7 @@ class RoonService {
   }
 
   convenienceSwitch(call, callback) {
-    this.bridge('ConvenienceSwitch', this.transportApi, 'convenience_switch', req => {
+    this.bridge('ConvenienceSwitch', 'transportApi', 'convenience_switch', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -371,7 +379,7 @@ class RoonService {
   }
 
   groupOutputs(call, callback) {
-    this.bridge('GroupOutputs', this.transportApi, 'group_outputs', req => {
+    this.bridge('GroupOutputs', 'transportApi', 'group_outputs', req => {
       var outputsNotFound = []
       var outputs = req.output_ids.map(outputId => {
         var output = this.lookupOutput(outputId)
@@ -388,7 +396,7 @@ class RoonService {
   }
 
   mute(call, callback) {
-    this.bridge('Mute', this.transportApi, 'mute', req => {
+    this.bridge('Mute', 'transportApi', 'mute', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -404,7 +412,7 @@ class RoonService {
   }
 
   muteAll(call, callback) {
-    this.bridge('MuteAll', this.transportApi, 'mute_all', req => {
+    this.bridge('MuteAll', 'transportApi', 'mute_all', req => {
       if (!req.how || req.how.endsWith('_unspecified')) {
         return {message: 'Must specify a mute action', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -413,11 +421,11 @@ class RoonService {
   }
 
   pauseAll(call, callback) {
-    this.bridge('PauseAll', this.transportApi, 'pause_all', req => [])(call, callback)
+    this.bridge('PauseAll', 'transportApi', 'pause_all', req => [])(call, callback)
   }
 
   seek(call, callback) {
-    this.bridge('Seek', this.transportApi, 'seek', req => {
+    this.bridge('Seek', 'transportApi', 'seek', req => {
       var zone_or_output
       if (req.zone_id) {
         zone_or_output = this.lookupZone(req.zone_id)
@@ -441,7 +449,7 @@ class RoonService {
   }
 
   standby(call, callback) {
-    this.bridge('Standby', this.transportApi, 'standby', req => {
+    this.bridge('Standby', 'transportApi', 'standby', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -455,7 +463,7 @@ class RoonService {
   }
 
   toggleStandby(call, callback) {
-    this.bridge('ToggleStandby', this.transportApi, 'toggle_standby', req => {
+    this.bridge('ToggleStandby', 'transportApi', 'toggle_standby', req => {
       if (!req.output_id) {
         return {message: 'Must specify an output_id', code: grpc.status.INVALID_ARGUMENT}
       }
@@ -469,7 +477,7 @@ class RoonService {
   }
 
   transferZone(call, callback) {
-    this.bridge('TransferZone', this.transportApi, 'transfer_zone', req => {
+    this.bridge('TransferZone', 'transportApi', 'transfer_zone', req => {
       var from
       var to
       if (req.from_zone_id) {
@@ -503,7 +511,7 @@ class RoonService {
   }
 
   ungroupOutputs(call, callback) {
-    this.bridge('UngroupOutputs', this.transportApi, 'ungroup_outputs', req => {
+    this.bridge('UngroupOutputs', 'transportApi', 'ungroup_outputs', req => {
       var outputsNotFound = []
       var outputs = req.output_ids.map(outputId => {
         var output = this.lookupOutput(outputId)
@@ -527,13 +535,13 @@ class RoonService {
 
   startGRPCServer(args) {
     if (this.server) {
-      log.error('RPC server already started')
+      log.error('gRPC server already started')
       return
     }
     var roonProto = loadRoonProto()
     this.server = new grpc.Server()
-    log.info(`Starting gRPC server at ${args.host}`)
     this.server.addService(roonProto.RoonService.service, this)
+    log.info(`Starting gRPC server at ${args.host}`)
     if (!this.server.bind(args.host, grpc.ServerCredentials.createInsecure())) {
       log.error(`Failed to bind to ${args.host}`)
       process.exit(1)
@@ -547,7 +555,7 @@ class RoonService {
       log.error('RoonApi already initialized')
       return
     }
-    log.info('Starting Roon discovery')
+    log.info('Initializing RoonApi')
     setWorkingDir(args.root)
     this.roon = new RoonApi({
       extension_id:    'com.sambosley.grpc.roon',
@@ -569,6 +577,8 @@ class RoonService {
       provided_services: [statusSvc],
       required_services: [RoonApiTransport, RoonApiBrowse, RoonApiImage]
     })
+
+    log.info('Starting Roon discovery')
     if (args.dockerMac) {
       // Docker for Mac has trouble with UDP discovery, so just attempt
       // to connect directly in this case.
