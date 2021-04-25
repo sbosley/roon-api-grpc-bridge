@@ -3,7 +3,7 @@ load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
 nodejs_binary(
     name = "bridge-server",
     data = [
-        "@npm//grpc",
+        "@npm//@grpc/grpc-js",
         "@npm//@grpc/proto-loader",
         "@npm//commander",
         "@npm//loglevel",

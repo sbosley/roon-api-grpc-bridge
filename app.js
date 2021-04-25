@@ -15,9 +15,9 @@
  */
 'use strict'
 const version = '0.1.0'
-const grpc = require('grpc')
+const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader')
-const commander = require('commander')
+const program = require('commander')
 const log = require('loglevel')
 
 const RoonApi = require('node-roon-api')
@@ -542,12 +542,13 @@ class RoonService {
     this.server = new grpc.Server()
     this.server.addService(roonProto.RoonService.service, this)
     log.info(`Starting gRPC server at ${args.host}`)
-    if (!this.server.bind(args.host, grpc.ServerCredentials.createInsecure())) {
-      log.error(`Failed to bind to ${args.host}`)
-      process.exit(1)
-    }
-    this.server.start()
-    log.info('Started gRPC server')
+    this.server.bindAsync(args.host, grpc.ServerCredentials.createInsecure(), (err) => {
+      if (err) {
+        log.error(`Failed to bind to ${args.host}`)
+        process.exit(1)
+      }
+      this.server.start()
+    })
   }
 
   startRoonDiscovery(args) {
@@ -611,14 +612,15 @@ function setWorkingDir(dir) {
 function main() {
   // Note: the default value for the root arg is the BUILD_WORKSPACE_DIRECTORY env variable,
   // which is set by Bazel when running with 'bazel run'.
-  var args = commander
+  program
     .version(version, '-v, --version')
     .option('-h, --host [host]', 'the host (including port number) on which to expose the Roon Bridge gRPC server', '0.0.0.0:50051')
     .option('-rl, --roon-log-level [roonLogLevel]', 'the log level for the Roon API client. Must be one of "none", "info", or "all"', 'none')
     .option('-l, --log-level [logLevel]', 'the log level for the gRPC server. Must be one of "debug", "info", "warn", "error", or "silent"', 'info')
     .option('-r, --root [dir]', 'the root directory that identifies the extension to Roon', process.env.BUILD_WORKSPACE_DIRECTORY)
     .option('--docker-mac', 'indicates if the container is running in docker for Mac, which requires bypassing service discovery')
-    .parse(process.argv)
+  program.parse(process.argv)
+  const args = program.opts()
   
   log.setLevel(args.logLevel)
   var service = new RoonService()
