@@ -580,23 +580,21 @@ class RoonService {
     })
 
     log.info('Starting Roon discovery')
-    if (args.dockerMac) {
-      // Docker for Mac has trouble with UDP discovery, so just attempt
-      // to connect directly in this case.
-      this.tryDockerHostWsConnect()
+    if (args.roonHost && args.roonPort) {
+      this.tryDockerHostWsConnect(args.roonHost, args.roonPort)
     } else {
       this.roon.start_discovery()
     }
   }
   
-  tryDockerHostWsConnect() {
-    let connect = this.roon.ws_connect({host: 'host.docker.internal', port: 9100, onclose: () => {
+  tryDockerHostWsConnect(host, port) {
+    let connect = this.roon.ws_connect({host: host, port: port, onclose: () => {
       log.error('lost Roon connection, attempting to connect again...')
-      setImmediate(() => this.tryDockerHostWsConnect())
+      setImmediate(() => this.tryDockerHostWsConnect(host, port))
     }})
     connect.transport.ws.onerror = (err) => {
       log.error('failed to connect to Roon; it may be offline, attempting to connect again...')
-      setTimeout(() => this.tryDockerHostWsConnect(), 5000)
+      setTimeout(() => this.tryDockerHostWsConnect(host, port), 5000)
     }
   }
 }
@@ -618,7 +616,8 @@ function main() {
     .option('-rl, --roon-log-level [roonLogLevel]', 'the log level for the Roon API client. Must be one of "none", "info", or "all"', 'none')
     .option('-l, --log-level [logLevel]', 'the log level for the gRPC server. Must be one of "debug", "info", "warn", "error", or "silent"', 'info')
     .option('-r, --root [dir]', 'the root directory that identifies the extension to Roon', process.env.BUILD_WORKSPACE_DIRECTORY)
-    .option('--docker-mac', 'indicates if the container is running in docker for Mac, which requires bypassing service discovery')
+    .option('--roon-host [roonHost]', 'the hostname to use for directly connecting to Roon instead of using UDP discovery. Must be specified along with --roon-port.')
+    .option('--roon-port [roonPort]', 'the port number to use for directly connecting to Roon instead of using UDP discovery. Must be specified along with --roon-host.')
   program.parse(process.argv)
   const args = program.opts()
   

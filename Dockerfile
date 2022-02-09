@@ -10,4 +10,5 @@ RUN npm install
 
 # gRPC port
 EXPOSE 50051
-CMD ["node", "app.js", "--docker-mac"]
+ENTRYPOINT [ "node", "app.js" ]
+CMD ["--roon-host=host.docker.internal", "--roon-port=9300"]
