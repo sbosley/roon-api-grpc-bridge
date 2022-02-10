@@ -10,10 +10,10 @@
     "url": "https://github.com/sbosley/roon-api-grpc-bridge.git"
   },
   "dependencies": {
-    "@grpc/grpc-js": "^1.2.12",
-    "@grpc/proto-loader": "^0.6.1",
-    "commander": "^7.2.0",
-    "loglevel": "^1.7.0",
+    "@grpc/grpc-js": "^1.5.4",
+    "@grpc/proto-loader": "^0.6.9",
+    "commander": "^9.0.0",
+    "loglevel": "^1.8.0",
     "node-roon-api": "github:roonlabs/node-roon-api",
     "node-roon-api-browse": "github:roonlabs/node-roon-api-browse",
     "node-roon-api-image": "github:roonlabs/node-roon-api-image",

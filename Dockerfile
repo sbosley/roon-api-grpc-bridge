@@ -1,4 +1,4 @@
-FROM node:14-alpine
+FROM node:16-alpine
 RUN apk --no-cache add git  # Not included on alpine but needed for npm install
 
 WORKDIR /usr/app/
