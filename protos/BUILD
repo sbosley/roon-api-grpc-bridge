@@ -15,7 +15,7 @@ proto_library(
 
 go_proto_library(
     name = "roon_go_proto",
-    compilers = ["@io_bazel_rules_go//proto:go_grpc"],
+    compiler = "@io_bazel_rules_go//proto:go_grpc",
     importpath = "github.com/sbosley/roon-api-grpc-bridge/protos/roon_go_proto",
     proto = ":roon_proto",
 )
